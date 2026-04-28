@@ -23,5 +23,49 @@ export const issueStatusHandler = async (event) => {
 
   if (status === "Response Issued") {
     console.log("Issue reached Response Issued");
+
+    const issueKey = event.issue.key;
+
+    // Creating new issue
+    const response = await api.asApp().requestJira(route`/rest/api/3/issue`, {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        fields: {
+          project: {
+            key: issueKey.split('-')[0]
+          },
+          summary: "DAD",
+          description: {
+            type: "doc",
+            version: 1,
+            content: [
+              {
+                type: "paragraph",
+                content: [
+                  {
+                    type: "text",
+                    text: `Auto-created from ${issueKey}`
+                  }
+                ]
+              }
+            ]
+          },
+          issuetype: {
+            name: "Task"
+          },
+
+          // Label for filtering KANBAN board 
+          labels: ["DAD"]
+        }
+      })
+    });
+
+    const data = await response.json();
+
+    console.log("Created issue:", data);
   }
 };
