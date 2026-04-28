@@ -7,12 +7,28 @@ modules:
       render: native
       title: delivery-bridge
       icon: https://developer.atlassian.com/platform/forge/images/icons/issue-panel-icon.svg
+
+  trigger:
+    - key: issue-status-trigger
+      function: issueStatusHandler
+      events:
+        - avi:jira:updated:issue
+
   function:
     - key: resolver
       handler: index.handler
+
+    - key: issueStatusHandler
+      handler: index.issueStatusHandler
+
 resources:
   - key: main
     path: src/frontend/index.jsx
+
+permissions:
+  scopes:
+    - read:jira-work
+
 app:
   runtime:
     name: nodejs24.x
