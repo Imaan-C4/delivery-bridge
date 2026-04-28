@@ -28,6 +28,7 @@ resources:
 permissions:
   scopes:
     - read:jira-work
+    - write:jira-work
 
 app:
   runtime:
