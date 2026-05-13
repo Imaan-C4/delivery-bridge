@@ -61,7 +61,7 @@ const App = () => {
   return (
     <>
       {/* Displays current UI status message */}
-      <Text>{data}</Text>
+      {isDadTicket && <Text>{data}</Text>}
 
       {/* Only shows button on DAD tickets */}
       {isDadTicket && (
