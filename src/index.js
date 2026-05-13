@@ -1,5 +1,11 @@
 import Resolver from '@forge/resolver';
 import api, { route } from '@forge/api';
+import {
+  shouldCreateDadTicket,
+  getManagerForLabel,
+  isDadLabelPresent,
+  getChildTickets
+} from './services/ticketLogic';
 
 const resolver = new Resolver();
 
@@ -25,7 +31,7 @@ resolver.define('isDadTicket', async (req) => {
   console.log("Current issue labels:", labels);
 
   // The Decompose Activities button only appears on issues with this label.
-  return labels.includes("DAD");
+  return isDadLabelPresent(labels);
 });
 
 // Creates Dev, Test, and System Test tickets from the current DAD ticket.
@@ -36,20 +42,16 @@ resolver.define('createChildTickets', async (req) => {
     throw new Error("No issue key found");
   }
 
-  // Fetch current DAD issue so we can use its summary
+  // Fetch current DAD issue so we can use its summary and linked issue
   const issueResponse = await api.asApp().requestJira(
-    route`/rest/api/3/issue/${issueKey}`
+    route`/rest/api/3/issue/${issueKey}?fields=summary,labels,issuelinks`
   );
 
   const issueData = await issueResponse.json();
   const parentSummary = issueData.fields.summary;
 
   // Each child ticket gets its own suffix and label.
-  const childTickets = [
-    { suffix: "Dev", label: "dev" },
-    { suffix: "Test", label: "test" },
-    { suffix: "System Test", label: "system-test" }
-  ];
+  const childTickets = getChildTickets(parentSummary);
   const results = [];
 
   // Creates each child ticket in the same Jira project as the DAD ticket.
@@ -67,7 +69,7 @@ resolver.define('createChildTickets', async (req) => {
             project: {
               key: issueKey.split('-')[0]
             },
-            summary: `${parentSummary} ${child.suffix}`,
+            summary: child.summary,
             issuetype: {
               name: "Task"
             },
@@ -91,7 +93,7 @@ export const issueStatusHandler = async (event) => {
   console.log("Current status:", status);
 
   // Only create a DAD ticket when the issue reaches this workflow status.
-  if (status !== "Response Issued") {
+  if (!shouldCreateDadTicket(status)) {
     return;
   }
   console.log("Issue reached Response Issued");
@@ -101,7 +103,7 @@ export const issueStatusHandler = async (event) => {
 
   // Fetches full issue details because trigger events may not include all fields.
   const issueResponse = await api.asApp().requestJira(
-    route`/rest/api/3/issue/${issueKey}`
+    route`/rest/api/3/issue/${issueKey}?fields=labels,issuelinks`
   );
 
   const issueData = await issueResponse.json();
@@ -111,25 +113,36 @@ export const issueStatusHandler = async (event) => {
   // Uses the first label to decide which delivery manager gets the DAD ticket.
   const label = labels[0];
 
-  const managerMap = {
-    green: "712020:5922a8fa-72be-4224-9d69-c2a71a5cd3a7",
-    blue: "712020:8fae6ecc-0929-4386-8d71-9b16162a2ae5",
-    red: "712020:1064872d-7c70-430a-84da-7beebb53fd22"
-  };
-  const assigneeAccountId = managerMap[label];
-
+  const assigneeAccountId = getManagerForLabel(label);
   console.log("Selected manager:", assigneeAccountId);
 
   // Check if a DAD ticket already exists for this issue
-  const existingDadResponse = await api.asApp().requestJira(
-    route`/rest/api/3/search?jql=${`project = ${projectKey} AND labels = DAD AND text ~ "${issueKey}"`}`
-  );
+  const issueLinks = issueData.fields.issuelinks || [];
+  let existingDadLink = false;
 
-  const existingDadData = await existingDadResponse.json();
-  console.log("Existing DAD tickets found:", existingDadData.total);
+  for (const link of issueLinks) {
+    const linkedIssue = link.inwardIssue || link.outwardIssue;
+    const linkedIssueKey = linkedIssue?.key;
+    
+    if (!linkedIssueKey) {
+      continue;
+    }
+    const linkedIssueResponse = await api.asApp().requestJira(
+      route`/rest/api/3/issue/${linkedIssueKey}?fields=labels`
+    );
+    const linkedIssueData = await linkedIssueResponse.json();
+    const linkedLabels = linkedIssueData.fields.labels || [];
+
+    if (linkedLabels.includes("DAD")) {
+      existingDadLink = true;
+      break;
+    }
+  }
+
+  console.log("Existing linked DAD ticket found:", existingDadLink);
 
   // Stops duplicate DAD tickets if Jira sends repeated or delayed events.
-  if (existingDadData.total > 0) {
+  if (existingDadLink) {
     console.log("DAD ticket already exists for this issue. Exiting.");
     return;
   }
