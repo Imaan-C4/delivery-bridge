@@ -89,6 +89,7 @@ resolver.define('createChildTickets', async (req) => {
 export const issueStatusHandler = async (event) => {
   console.log("Trigger fired");
 
+  // Retrieves and logs KANBAN column status every time issue udated
   const status = event.issue?.fields?.status?.name;
   console.log("Current status:", status);
 

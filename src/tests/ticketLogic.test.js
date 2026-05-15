@@ -46,6 +46,16 @@ test('positive: creates Dev, Test, and System Test child ticket definitions', ()
   ]);
 });
 
+// DAD ticket visibility logic
+
 test('negative: non-DAD issue label is not treated as a DAD ticket', () => {
   expect(isDadLabelPresent(["green"])).toBe(false);
+});
+
+test('positive: returns true when DAD label exists alongside other labels', () => {
+  expect(isDadLabelPresent(["green", "DAD"])).toBe(true);
+});
+
+test('negative: returns false when issue contains no labels', () => {
+  expect(isDadLabelPresent([])).toBe(false);
 });
